@@ -7,7 +7,19 @@ apiVersion = 'alpha'
 client = GraphQLClient('https://api.start.gg/gql/' + apiVersion)
 client.inject_token('Bearer ' + authToken)
 
-def getTopXOfRaves(x):
+def removeWhiteSpace(str_):
+  while " " in str_:
+    str_ = str_.replace(" ", "")
+  return str_
+
+def removeDuplicates(list_):
+  l = []
+  for obj in list_:
+    if obj not in l:
+      l.append(obj)
+  return l
+
+def getTopXOfRaves(x=8):
     tournaments = client.execute("""
     query Raves($perPage: Int, $coordinates: String!, $radius: String!){
     tournaments(query: {
@@ -56,10 +68,25 @@ def getTopXOfRaves(x):
 def getTopXListFromRave(rave):
     topx = []
     for entrant in rave:
-        topx.append({"placement": entrant['placement'], "tag": entrant['entrant']['name']})
+        topx.append({"placement": entrant['placement'], "tag": removeWhiteSpace(entrant['entrant']['name'].split("|")[-1])})
     return topx
         
-def makeRankings(pointsFormula=lambda x: 1/x, top=8):
+def makeRankings(pointsFormula=lambda x: 1/x, top=8, stacking=True, rounding=3, requirement=2):
+    """
+    top: only count the people who have made top 8, top 16, or top 500
+
+    pointsFormula: the formula that you plug your placements into to be added to your score
+
+    stacking: people with the same points get the same rank
+
+    rounding: scores get rounded by this number
+
+    requirement: how many tournaments are required for them to be counted
+    
+    
+    """
+
+
     data = {}
     raves = getTopXOfRaves(x=top)
     numRaves = 0
@@ -71,24 +98,47 @@ def makeRankings(pointsFormula=lambda x: 1/x, top=8):
                 for player in topx:
                     if player['tag'] not in data: # i love python so much
                         data[player['tag']] = {'score': 0, 'placements': []}
-                    data[player['tag']]['score'] += round(pointsFormula(player['placement']), 3)
-                    data[player['tag']]['placements'].append(player['placement'])
-    
-    rankings = sorted(data.items(), key=lambda x: x[1]['score'], reverse=True)
+                    data[player['tag']]['score'] += round(pointsFormula(player['placement']), rounding)
+                    data[player['tag']]['placements'].append(player['placement'])       
+
+    rankings = {}
+
+    filteredData = dict(filter(lambda player: len(player[1]['placements']) >= requirement, list(data.items())))
+
+    sortedData = sorted(filteredData.items(), key=lambda x: x[1]['score'], reverse=True)
+
+    rank = 1
+    i = 0
+    previousPlayer = None
+    while(i < len(sortedData)):
+
+        player = sortedData[i]
+
+        dictPlayer = {player[0]: player[1]}
+
+        if stacking:
+            if previousPlayer and player[1]['score'] == previousPlayer[1]['score']:
+                rank -= 1
+        if rank not in rankings:
+            rankings[rank] = []
+        
+        rankings[rank].append(dictPlayer)
+        
+        previousPlayer = player
+
+        rank += 1
+        i += 1
+
     return rankings
 
-def parseRankings(rankings):
-    msg = "\n"
-    rank = 1
-    while(rank-1 < rankings.__len__()):
-        player = rankings[rank-1]
-        msg += f"{rank}: {player[0]} - score: {round(player[1]['score'], 2)} - placements: {sorted(player[1]['placements'], reverse=False)}\n"
-        rank += 1
-    return msg
-
-
-rankings = makeRankings(top=32)
-print(parseRankings(rankings))
+def getPRList():
+    rankings = makeRankings(
+        top=16, 
+        pointsFormula=lambda x: 1/math.pow(x, 1), 
+        rounding=3, 
+        requirement=1
+    )
+    return rankings
 
 """
 What this algorithm does is look at the top 8 (or top 16 or top whatever you choose) of every rave and counts each player
