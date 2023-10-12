@@ -131,14 +131,24 @@ def makeRankings(pointsFormula=lambda x: 1/x, top=8, stacking=True, rounding=3, 
 
     return rankings
 
-def getPRList():
-    rankings = makeRankings(
-        top=16, 
-        pointsFormula=lambda x: 1/math.pow(x, 1), 
-        rounding=3, 
-        requirement=1
+def printPRList(rankings):
+    print("\n")
+    for rank in rankings:
+        print(f"{rank}: \n", end='')
+        for player in rankings[rank]:
+            data = list(player.items())[0]
+            print(f"\t{data[0]}: {data[1]}")
+    print("\n")
+
+rankings = makeRankings(
+        top=32, 
+        pointsFormula=lambda x: 1/x, 
+        stacking=True,
+        rounding=100, 
+        requirement=2
     )
-    return rankings
+
+printPRList(rankings)
 
 """
 What this algorithm does is look at the top 8 (or top 16 or top whatever you choose) of every rave and counts each player
